@@ -3,5 +3,4 @@ include:
     - _sources
     - _static
     - _modules
-    - _templates
     - _downloads
