@@ -1,0 +1,180 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>pyam: a Python toolkit for Integrated Assessment Modeling &#8212; pyam 0.1.0 documentation</title>
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="_static/gallery.css" type="text/css" />
+    <link rel="stylesheet" href="_static/table_styling.css" type="text/css" />
+    <script type="text/javascript" src="_static/documentation_options.js"></script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Class IamDataFrame" href="source/IamDataFrame.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="pyam-a-python-toolkit-for-integrated-assessment-modeling">
+<h1>pyam: a Python toolkit for Integrated Assessment Modeling<a class="headerlink" href="#pyam-a-python-toolkit-for-integrated-assessment-modeling" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="overview-and-scope">
+<h2>Overview and scope<a class="headerlink" href="#overview-and-scope" title="Permalink to this headline">¶</a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">pyam</span></code> package provides a range of diagnostic tools and functions
+for analyzing and working with IAMC-format timeseries data.</p>
+<dl class="docutils">
+<dt>Features:</dt>
+<dd><ul class="first last simple">
+<li>Summary of models, scenarios, variables, and regions included in a snapshot.</li>
+<li>Display of timeseries data as pandas.DataFrame
+with IAMC-specific filtering options.</li>
+<li>Simple visualization and plotting functions.</li>
+<li>Diagnostic checks for non-reported variables or timeseries data
+to identify outliers and potential reporting issues.</li>
+<li>Categorization of scenarios according to timeseries data
+or meta-identifiers for further analysis.</li>
+</ul>
+</dd>
+</dl>
+<p>The package can be used with data that follows the data template convention
+of the <a class="reference external" href="http://www.globalchange.umd.edu/iamc/">Integrated Assessment Modeling Consortium</a> (IAMC).
+An illustrative example is shown below;
+see <a class="reference external" href="http://data.ene.iiasa.ac.at/database/">data.ene.iiasa.ac.at/database</a> for more information.</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="15%" />
+<col width="16%" />
+<col width="12%" />
+<col width="17%" />
+<col width="10%" />
+<col width="10%" />
+<col width="10%" />
+<col width="10%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head"><strong>model</strong></th>
+<th class="head"><strong>scenario</strong></th>
+<th class="head"><strong>region</strong></th>
+<th class="head"><strong>variable</strong></th>
+<th class="head"><strong>unit</strong></th>
+<th class="head"><strong>2005</strong></th>
+<th class="head"><strong>2010</strong></th>
+<th class="head"><strong>2015</strong></th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td>MESSAGE V.4</td>
+<td>AMPERE3-Base</td>
+<td>World</td>
+<td>Primary Energy</td>
+<td>EJ/y</td>
+<td>454.5</td>
+<td>479.6</td>
+<td>…</td>
+</tr>
+<tr class="row-odd"><td>…</td>
+<td>…</td>
+<td>…</td>
+<td>…</td>
+<td>…</td>
+<td>…</td>
+<td>…</td>
+<td>…</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="pyam-documentation">
+<h2>pyam documentation<a class="headerlink" href="#pyam-documentation" title="Permalink to this headline">¶</a></h2>
+<p>See <a class="reference external" href="https://github.com/numpy/numpy/blob/master/doc/HOWTO_DOCUMENT.rst.txt">this guide</a> for guidelines on NumPy/SciPy Documentation conventions.</p>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="source/IamDataFrame.html">Class IamDataFrame</a></li>
+<li class="toctree-l1"><a class="reference internal" href="source/timeseries.html">Auxiliary timeseries functions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="source/examples/index.html">Examples</a><ul>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="#">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">pyam: a Python toolkit for Integrated Assessment Modeling</a><ul>
+<li><a class="reference internal" href="#overview-and-scope">Overview and scope</a></li>
+<li><a class="reference internal" href="#pyam-documentation">pyam documentation</a></li>
+</ul>
+</li>
+</ul>
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="#">Documentation overview</a><ul>
+      <li>Next: <a href="source/IamDataFrame.html" title="next chapter">Class IamDataFrame</a></li>
+  </ul></li>
+</ul>
+</div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/index.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    </div>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2017, Daniel Huppmann, Matthew Gidden @ IIASA Energy Program.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.7.1</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.10</a>
+      
+      |
+      <a href="_sources/index.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

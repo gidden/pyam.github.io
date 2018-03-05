@@ -1,0 +1,800 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>pyam.core &#8212; pyam 0.1.0 documentation</title>
+    <link rel="stylesheet" href="../../_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/gallery.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/table_styling.css" type="text/css" />
+    <script type="text/javascript" src="../../_static/documentation_options.js"></script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+   
+  <link rel="stylesheet" href="../../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for pyam.core</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">copy</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">six</span>
+<span class="kn">import</span> <span class="nn">itertools</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">import</span> <span class="nn">ixmp</span>
+    <span class="n">has_ix</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+    <span class="n">has_ix</span> <span class="o">=</span> <span class="kc">False</span>
+
+<span class="kn">from</span> <span class="nn">pyam</span> <span class="k">import</span> <span class="n">plotting</span>
+
+<span class="kn">from</span> <span class="nn">pyam.logger</span> <span class="k">import</span> <span class="n">logger</span>
+<span class="kn">from</span> <span class="nn">pyam.run_control</span> <span class="k">import</span> <span class="n">run_control</span>
+<span class="kn">from</span> <span class="nn">pyam.utils</span> <span class="k">import</span> <span class="p">(</span>
+    <span class="n">isstr</span><span class="p">,</span>
+    <span class="n">write_sheet</span><span class="p">,</span>
+    <span class="n">read_ix</span><span class="p">,</span>
+    <span class="n">read_files</span><span class="p">,</span>
+    <span class="n">read_pandas</span><span class="p">,</span>
+    <span class="n">format_data</span><span class="p">,</span>
+    <span class="n">pattern_match</span><span class="p">,</span>
+    <span class="n">years_match</span><span class="p">,</span>
+    <span class="n">isstr</span><span class="p">,</span>
+    <span class="n">META_IDX</span><span class="p">,</span>
+    <span class="n">IAMC_IDX</span><span class="p">,</span>
+    <span class="n">SORT_IDX</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">pyam.timeseries</span> <span class="k">import</span> <span class="n">fill_series</span>
+
+
+<div class="viewcode-block" id="IamDataFrame"><a class="viewcode-back" href="../../source/IamDataFrame.html#pyam.IamDataFrame">[docs]</a><span class="k">class</span> <span class="nc">IamDataFrame</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;This class is a wrapper for dataframes following the IAMC data convention.</span>
+<span class="sd">    It provides a number of diagnostic features (including validation of values,</span>
+<span class="sd">    completeness of variables provided) as well as a number of visualization and</span>
+<span class="sd">    plotting tools.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Initialize an instance of an IamDataFrame</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data: ixmp.TimeSeries, ixmp.Scenario, pd.DataFrame or data file</span>
+<span class="sd">            an instance of an TimeSeries or Scenario (requires `ixmp`),</span>
+<span class="sd">            or pd.DataFrame or data file with IAMC-format data columns</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># import data from pd.DataFrame or read from source</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">format_data</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+        <span class="k">elif</span> <span class="n">has_ix</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">ixmp</span><span class="o">.</span><span class="n">TimeSeries</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">read_ix</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">read_files</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="c1"># define a dataframe for categorization and other meta-data</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">META_IDX</span><span class="p">]</span><span class="o">.</span><span class="n">drop_duplicates</span><span class="p">()</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="n">META_IDX</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reset_exclude</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+        <span class="n">_key_check</span> <span class="o">=</span> <span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="k">if</span> <span class="n">isstr</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="k">else</span> <span class="n">key</span>
+        <span class="k">if</span> <span class="nb">set</span><span class="p">(</span><span class="n">_key_check</span><span class="p">)</span><span class="o">.</span><span class="n">issubset</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">columns</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="fm">__getitem__</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="fm">__getitem__</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="n">_key_check</span> <span class="o">=</span> <span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="k">if</span> <span class="n">isstr</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="k">else</span> <span class="n">key</span>
+        <span class="k">if</span> <span class="nb">set</span><span class="p">(</span><span class="n">_key_check</span><span class="p">)</span><span class="o">.</span><span class="n">issubset</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">columns</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="fm">__setitem__</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="fm">__setitem__</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="fm">__len__</span><span class="p">()</span>
+
+<div class="viewcode-block" id="IamDataFrame.head"><a class="viewcode-back" href="../../source/IamDataFrame.html#pyam.IamDataFrame.head">[docs]</a>    <span class="k">def</span> <span class="nf">head</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Identical to pd.DataFrame.head() operating on data&quot;&quot;&quot;</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+<div class="viewcode-block" id="IamDataFrame.tail"><a class="viewcode-back" href="../../source/IamDataFrame.html#pyam.IamDataFrame.tail">[docs]</a>    <span class="k">def</span> <span class="nf">tail</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Identical to pd.DataFrame.tail() operating on data&quot;&quot;&quot;</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">tail</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+<div class="viewcode-block" id="IamDataFrame.append"><a class="viewcode-back" href="../../source/IamDataFrame.html#pyam.IamDataFrame.append">[docs]</a>    <span class="k">def</span> <span class="nf">append</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Import or read timeseries data and append to IamDataFrame</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        other: pyam.IamDataFrame, ixmp.TimeSeries, ixmp.Scenario,</span>
+<span class="sd">        pd.DataFrame or data file</span>
+<span class="sd">            an IamDataFrame, TimeSeries or Scenario (requires `ixmp`),</span>
+<span class="sd">            or pd.DataFrame or data file with IAMC-format data columns</span>
+<span class="sd">        inplace : bool, default False</span>
+<span class="sd">            if True, do operation inplace and return None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">ret</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">inplace</span> <span class="k">else</span> <span class="bp">self</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">IamDataFrame</span><span class="p">):</span>
+            <span class="n">other</span> <span class="o">=</span> <span class="n">IamDataFrame</span><span class="p">(</span><span class="n">other</span><span class="p">)</span>
+
+        <span class="c1"># check that any model/scenario is not yet included in IamDataFrame</span>
+        <span class="n">ret</span><span class="o">.</span><span class="n">meta</span> <span class="o">=</span> <span class="n">ret</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">other</span><span class="o">.</span><span class="n">meta</span><span class="p">,</span> <span class="n">verify_integrity</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="c1"># add new data</span>
+        <span class="n">ret</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">ret</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">other</span><span class="o">.</span><span class="n">data</span><span class="p">)</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">inplace</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">ret</span>
+
+<div class="viewcode-block" id="IamDataFrame.pivot_table"><a class="viewcode-back" href="../../source/IamDataFrame.html#pyam.IamDataFrame.pivot_table">[docs]</a>    <span class="k">def</span> <span class="nf">pivot_table</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">columns</span><span class="p">,</span> <span class="n">values</span><span class="o">=</span><span class="s1">&#39;value&#39;</span><span class="p">,</span>
+                    <span class="n">aggfunc</span><span class="o">=</span><span class="s1">&#39;count&#39;</span><span class="p">,</span> <span class="n">fill_value</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">style</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Returns a pivot table</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        index: str or list of strings</span>
+<span class="sd">            rows for Pivot table</span>
+<span class="sd">        columns: str or list of strings</span>
+<span class="sd">            columns for Pivot table</span>
+<span class="sd">        values: str, default &#39;value&#39;</span>
+<span class="sd">            dataframe column to aggregate or count</span>
+<span class="sd">        aggfunc: str or function, default &#39;count&#39;</span>
+<span class="sd">            function used for aggregation,</span>
+<span class="sd">            accepts &#39;count&#39;, &#39;mean&#39;, and &#39;sum&#39;</span>
+<span class="sd">        fill_value: scalar, default None</span>
+<span class="sd">            value to replace missing values with</span>
+<span class="sd">        style: str, default None</span>
+<span class="sd">            output style for pivot table formatting</span>
+<span class="sd">            accepts &#39;highlight_not_max&#39;, &#39;heatmap&#39;</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">index</span> <span class="o">=</span> <span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="k">if</span> <span class="n">isstr</span><span class="p">(</span><span class="n">index</span><span class="p">)</span> <span class="k">else</span> <span class="n">index</span>
+        <span class="n">columns</span> <span class="o">=</span> <span class="p">[</span><span class="n">columns</span><span class="p">]</span> <span class="k">if</span> <span class="n">isstr</span><span class="p">(</span><span class="n">columns</span><span class="p">)</span> <span class="k">else</span> <span class="n">columns</span>
+
+        <span class="n">df</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span>
+
+        <span class="c1"># allow &#39;aggfunc&#39; to be passed as string for easier user interface</span>
+        <span class="k">if</span> <span class="n">isstr</span><span class="p">(</span><span class="n">aggfunc</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">aggfunc</span> <span class="o">==</span> <span class="s1">&#39;count&#39;</span><span class="p">:</span>
+                <span class="n">df</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">index</span> <span class="o">+</span> <span class="n">columns</span><span class="p">,</span> <span class="n">as_index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">count</span><span class="p">()</span>
+                <span class="n">fill_value</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="k">elif</span> <span class="n">aggfunc</span> <span class="o">==</span> <span class="s1">&#39;mean&#39;</span><span class="p">:</span>
+                <span class="n">df</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">index</span> <span class="o">+</span> <span class="n">columns</span><span class="p">,</span> <span class="n">as_index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>\
+                    <span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+                <span class="n">aggfunc</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span>
+                <span class="n">fill_value</span> <span class="o">=</span> <span class="mi">0</span> <span class="k">if</span> <span class="n">style</span> <span class="o">==</span> <span class="s1">&#39;heatmap&#39;</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+            <span class="k">elif</span> <span class="n">aggfunc</span> <span class="o">==</span> <span class="s1">&#39;sum&#39;</span><span class="p">:</span>
+                <span class="n">aggfunc</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span>
+                <span class="n">fill_value</span> <span class="o">=</span> <span class="mi">0</span> <span class="k">if</span> <span class="n">style</span> <span class="o">==</span> <span class="s1">&#39;heatmap&#39;</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+
+        <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">pivot_table</span><span class="p">(</span><span class="n">values</span><span class="o">=</span><span class="n">values</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="n">columns</span><span class="p">,</span>
+                            <span class="n">aggfunc</span><span class="o">=</span><span class="n">aggfunc</span><span class="p">,</span> <span class="n">fill_value</span><span class="o">=</span><span class="n">fill_value</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">df</span>
+
+<div class="viewcode-block" id="IamDataFrame.interpolate"><a class="viewcode-back" href="../../source/IamDataFrame.html#pyam.IamDataFrame.interpolate">[docs]</a>    <span class="k">def</span> <span class="nf">interpolate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">year</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Interpolate missing values in timeseries (linear interpolation)</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        year: int</span>
+<span class="sd">             year to be interpolated</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pivot_table</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="n">IAMC_IDX</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;year&#39;</span><span class="p">],</span>
+                              <span class="n">values</span><span class="o">=</span><span class="s1">&#39;value&#39;</span><span class="p">,</span> <span class="n">aggfunc</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">)</span>
+        <span class="n">fill_values</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">fill_series</span><span class="p">,</span>
+                               <span class="n">raw</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">year</span><span class="o">=</span><span class="n">year</span><span class="p">)</span>
+        <span class="n">fill_values</span> <span class="o">=</span> <span class="n">fill_values</span><span class="o">.</span><span class="n">dropna</span><span class="p">()</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
+        <span class="n">fill_values</span> <span class="o">=</span> <span class="n">fill_values</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">{</span><span class="mi">0</span><span class="p">:</span> <span class="s2">&quot;value&quot;</span><span class="p">})</span>
+        <span class="n">fill_values</span><span class="p">[</span><span class="s1">&#39;year&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">year</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">fill_values</span><span class="p">)</span>
+
+<div class="viewcode-block" id="IamDataFrame.as_pandas"><a class="viewcode-back" href="../../source/IamDataFrame.html#pyam.IamDataFrame.as_pandas">[docs]</a>    <span class="k">def</span> <span class="nf">as_pandas</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">with_metadata</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Return this as a pd.DataFrame</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        with_metadata : bool, default False</span>
+<span class="sd">           if True, join data with existing metadata</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span>
+        <span class="k">if</span> <span class="n">with_metadata</span><span class="p">:</span>
+            <span class="n">df</span> <span class="o">=</span> <span class="p">(</span><span class="n">df</span>
+                  <span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="n">META_IDX</span><span class="p">)</span>
+                  <span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">)</span>
+                  <span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
+                  <span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">df</span>
+
+<div class="viewcode-block" id="IamDataFrame.timeseries"><a class="viewcode-back" href="../../source/IamDataFrame.html#pyam.IamDataFrame.timeseries">[docs]</a>    <span class="k">def</span> <span class="nf">timeseries</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Returns a dataframe in the standard IAMC format</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">pivot_table</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="n">IAMC_IDX</span><span class="p">,</span></div>
+                                     <span class="n">columns</span><span class="o">=</span><span class="s1">&#39;year&#39;</span><span class="p">)[</span><span class="s1">&#39;value&#39;</span><span class="p">]</span>
+
+<div class="viewcode-block" id="IamDataFrame.reset_exclude"><a class="viewcode-back" href="../../source/IamDataFrame.html#pyam.IamDataFrame.reset_exclude">[docs]</a>    <span class="k">def</span> <span class="nf">reset_exclude</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Reset exclusion assignment for all scenarios to `exclude: False`</span>
+<span class="sd">        &quot;&quot;&quot;</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s1">&#39;exclude&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+
+<div class="viewcode-block" id="IamDataFrame.metadata"><a class="viewcode-back" href="../../source/IamDataFrame.html#pyam.IamDataFrame.metadata">[docs]</a>    <span class="k">def</span> <span class="nf">metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">meta</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Add metadata columns as pd.Series or list</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        meta: pd.Series, list, int or str</span>
+<span class="sd">            column to be added to metadata</span>
+<span class="sd">            (by `[&#39;model&#39;, &#39;scenario&#39;]` index if possible)</span>
+<span class="sd">        name: str</span>
+<span class="sd">            category column name (if not given by data series name)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">meta</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">)</span> <span class="ow">and</span> \
+                <span class="n">meta</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">names</span> <span class="o">==</span> <span class="p">[</span><span class="s1">&#39;model&#39;</span><span class="p">,</span> <span class="s1">&#39;scenario&#39;</span><span class="p">]:</span>
+            <span class="n">diff</span> <span class="o">=</span> <span class="n">meta</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">difference</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">diff</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+                <span class="n">error</span> <span class="o">=</span> <span class="s2">&quot;adding metadata for non-existing scenarios &#39;</span><span class="si">{}</span><span class="s2">&#39;!&quot;</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">error</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">diff</span><span class="p">))</span>
+            <span class="n">meta</span> <span class="o">=</span> <span class="n">meta</span><span class="o">.</span><span class="n">to_frame</span><span class="p">(</span><span class="n">name</span> <span class="ow">or</span> <span class="n">meta</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">meta</span> <span class="o">=</span> <span class="n">meta</span><span class="o">.</span><span class="n">combine_first</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">)</span>
+            <span class="k">return</span>  <span class="c1"># EXIT FUNCTION</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">meta</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">):</span>
+            <span class="n">name</span> <span class="o">=</span> <span class="n">name</span> <span class="ow">or</span> <span class="n">meta</span><span class="o">.</span><span class="n">name</span>
+            <span class="n">meta</span> <span class="o">=</span> <span class="n">meta</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+</div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">meta</span>
+
+<div class="viewcode-block" id="IamDataFrame.categorize"><a class="viewcode-back" href="../../source/IamDataFrame.html#pyam.IamDataFrame.categorize">[docs]</a>    <span class="k">def</span> <span class="nf">categorize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">criteria</span><span class="p">,</span>
+                   <span class="n">color</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">marker</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Assign scenarios to a category according to specific criteria</span>
+<span class="sd">        or display the category assignment</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        name: str</span>
+<span class="sd">            category column name</span>
+<span class="sd">        value: str</span>
+<span class="sd">            category identifier</span>
+<span class="sd">        criteria: dict</span>
+<span class="sd">            dictionary with variables mapped to applicable checks</span>
+<span class="sd">            (&#39;up&#39; and &#39;lo&#39; for respective bounds, &#39;year&#39; for years - optional)</span>
+<span class="sd">        color: str</span>
+<span class="sd">            assign a color to this category for plotting</span>
+<span class="sd">        marker: str</span>
+<span class="sd">            assign a marker to this category for plotting</span>
+<span class="sd">        linestyle: str</span>
+<span class="sd">            assign a linestyle to this category for plotting</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># add plotting run control</span>
+        <span class="k">for</span> <span class="n">kind</span><span class="p">,</span> <span class="n">arg</span> <span class="ow">in</span> <span class="p">[(</span><span class="s1">&#39;color&#39;</span><span class="p">,</span> <span class="n">color</span><span class="p">),</span> <span class="p">(</span><span class="s1">&#39;marker&#39;</span><span class="p">,</span> <span class="n">marker</span><span class="p">),</span>
+                          <span class="p">(</span><span class="s1">&#39;linestyle&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="p">)]:</span>
+            <span class="k">if</span> <span class="n">arg</span><span class="p">:</span>
+                <span class="n">run_control</span><span class="p">()</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="n">kind</span><span class="p">:</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="p">{</span><span class="n">value</span><span class="p">:</span> <span class="n">arg</span><span class="p">}}})</span>
+
+        <span class="k">if</span> <span class="n">criteria</span> <span class="o">==</span> <span class="s1">&#39;uncategorized&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="si">{}</span><span class="s2"> of </span><span class="si">{}</span><span class="s2"> scenarios are uncategorized.&quot;</span>
+            <span class="n">logger</span><span class="p">()</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">==</span> <span class="n">value</span><span class="p">),</span>
+                                     <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">)))</span>
+            <span class="k">return</span>  <span class="c1"># EXIT FUNCTION</span>
+
+        <span class="c1"># find all data that matches categorization</span>
+        <span class="n">rows</span> <span class="o">=</span> <span class="n">_apply_criteria</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">criteria</span><span class="p">,</span>
+                               <span class="n">in_range</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">return_test</span><span class="o">=</span><span class="s1">&#39;all&#39;</span><span class="p">)</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="n">_meta_idx</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span>
+
+        <span class="c1"># update metadata dataframe</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">logger</span><span class="p">()</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;No scenarios satisfy the criteria&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">idx</span><span class="p">,</span> <span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="si">{}</span><span class="s2"> scenario</span><span class="si">{}</span><span class="s2"> categorized as </span><span class="si">{}</span><span class="s2">: &#39;</span><span class="si">{}</span><span class="s2">&#39;&quot;</span>
+            <span class="n">logger</span><span class="p">()</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">idx</span><span class="p">),</span> <span class="s1">&#39;&#39;</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="s1">&#39;s&#39;</span><span class="p">,</span></div>
+                                     <span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">))</span>
+
+<div class="viewcode-block" id="IamDataFrame.require_variable"><a class="viewcode-back" href="../../source/IamDataFrame.html#pyam.IamDataFrame.require_variable">[docs]</a>    <span class="k">def</span> <span class="nf">require_variable</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">variable</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">year</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">exclude</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Check whether all scenarios have a required variable</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        variable: str</span>
+<span class="sd">            required variable</span>
+<span class="sd">        unit: str, default None</span>
+<span class="sd">            name of unit (optional)</span>
+<span class="sd">        years: int or list, default None</span>
+<span class="sd">            years (optional)</span>
+<span class="sd">        exclude: bool, default False</span>
+<span class="sd">            flag scenarios missing the required variables as `exclude: True`</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">criteria</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;variable&#39;</span><span class="p">:</span> <span class="n">variable</span><span class="p">}</span>
+        <span class="k">if</span> <span class="n">unit</span><span class="p">:</span>
+            <span class="n">criteria</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s1">&#39;unit&#39;</span><span class="p">:</span> <span class="n">unit</span><span class="p">})</span>
+        <span class="k">if</span> <span class="n">year</span><span class="p">:</span>
+            <span class="n">criteria</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s1">&#39;year&#39;</span><span class="p">:</span> <span class="n">year</span><span class="p">})</span>
+
+        <span class="n">keep</span> <span class="o">=</span> <span class="n">_apply_filters</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">,</span> <span class="n">criteria</span><span class="p">)</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">difference</span><span class="p">(</span><span class="n">_meta_idx</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">keep</span><span class="p">]))</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">logger</span><span class="p">()</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;All scenarios have the required variable&#39;</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="n">msg</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="si">{}</span><span class="s1"> scenario</span><span class="si">{}</span><span class="s1"> to not include required variables&#39;</span>
+
+        <span class="k">if</span> <span class="n">exclude</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">idx</span><span class="p">,</span> <span class="s1">&#39;exclude&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="n">msg</span> <span class="o">+=</span> <span class="s1">&#39;, marked as `exclude=True` in metadata&#39;</span>
+
+        <span class="n">logger</span><span class="p">()</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">idx</span><span class="p">),</span> <span class="s1">&#39;&#39;</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="s1">&#39;s&#39;</span><span class="p">))</span></div>
+        <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="n">idx</span><span class="p">)</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
+
+<div class="viewcode-block" id="IamDataFrame.validate"><a class="viewcode-back" href="../../source/IamDataFrame.html#pyam.IamDataFrame.validate">[docs]</a>    <span class="k">def</span> <span class="nf">validate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">criteria</span><span class="o">=</span><span class="p">{},</span> <span class="n">exclude</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Validate scenarios using criteria on timeseries values</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        criteria: dict</span>
+<span class="sd">           dictionary with variable keys and check values</span>
+<span class="sd">            (&#39;up&#39; and &#39;lo&#39; for respective bounds, &#39;year&#39; for years)</span>
+<span class="sd">        exclude: bool, default False</span>
+<span class="sd">            flag scenarios failing validation as `exclude: True`</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="n">_apply_criteria</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">criteria</span><span class="p">,</span> <span class="n">in_range</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">exclude</span><span class="p">:</span>
+            <span class="n">idx</span> <span class="o">=</span> <span class="n">_meta_idx</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">idx</span><span class="p">,</span> <span class="s1">&#39;exclude&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">df</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="si">{}</span><span class="s1"> of </span><span class="si">{}</span><span class="s1"> data points to not satisfy the criteria&#39;</span>
+            <span class="n">logger</span><span class="p">()</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">df</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">)))</span>
+
+            <span class="k">if</span> <span class="n">exclude</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">logger</span><span class="p">()</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;Non-valid scenarios will be excluded&#39;</span><span class="p">)</span>
+</div>
+            <span class="k">return</span> <span class="n">df</span>
+
+<div class="viewcode-block" id="IamDataFrame.filter"><a class="viewcode-back" href="../../source/IamDataFrame.html#pyam.IamDataFrame.filter">[docs]</a>    <span class="k">def</span> <span class="nf">filter</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filters</span><span class="p">,</span> <span class="n">keep</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Return a filtered IamDataFrame (i.e., a subset of current data)</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        filters: dict</span>
+<span class="sd">            The following columns are available for filtering:</span>
+<span class="sd">             - metadata columns: filter by category assignment in metadata</span>
+<span class="sd">             - &#39;model&#39;, &#39;scenario&#39;, &#39;region&#39;, &#39;variable&#39;, &#39;unit&#39;:</span>
+<span class="sd">               string or list of strings, where ``*`` can be used as a wildcard</span>
+<span class="sd">             - &#39;level&#39;: the maximum &quot;depth&quot; of IAM variables (number of &#39;|&#39;)</span>
+<span class="sd">               (exluding the strings given in the &#39;variable&#39; argument)</span>
+<span class="sd">             - &#39;year&#39;: takes an integer, a list of integers or a range</span>
+<span class="sd">                note that the last year of a range is not included,</span>
+<span class="sd">                so ``range(2010,2015)`` is interpreted as ``[2010, ..., 2014]``</span>
+<span class="sd">        inplace : bool, default False</span>
+<span class="sd">            if True, do operation inplace and return None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">_keep</span> <span class="o">=</span> <span class="n">_apply_filters</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">,</span> <span class="n">filters</span><span class="p">)</span>
+        <span class="n">_keep</span> <span class="o">=</span> <span class="n">_keep</span> <span class="k">if</span> <span class="n">keep</span> <span class="k">else</span> <span class="o">~</span><span class="n">_keep</span>
+        <span class="n">ret</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">inplace</span> <span class="k">else</span> <span class="bp">self</span>
+        <span class="n">ret</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">ret</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">_keep</span><span class="p">]</span>
+
+        <span class="n">idx</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">MultiIndex</span><span class="o">.</span><span class="n">from_tuples</span><span class="p">(</span>
+            <span class="n">pd</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">ret</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;model&#39;</span><span class="p">],</span> <span class="n">ret</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;scenario&#39;</span><span class="p">]))),</span>
+            <span class="n">names</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;model&#39;</span><span class="p">,</span> <span class="s1">&#39;scenario&#39;</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">ret</span><span class="o">.</span><span class="n">meta</span> <span class="o">=</span> <span class="n">ret</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">inplace</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">ret</span>
+
+<div class="viewcode-block" id="IamDataFrame.col_apply"><a class="viewcode-back" href="../../source/IamDataFrame.html#pyam.IamDataFrame.col_apply">[docs]</a>    <span class="k">def</span> <span class="nf">col_apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">col</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Apply a function to a column</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        col: string</span>
+<span class="sd">            column in either data or metadata</span>
+<span class="sd">        func: functional</span>
+<span class="sd">            function to apply</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">col</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">col</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span></div>
+            <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="n">col</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="n">col</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_to_file_format</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Return a dataframe suitable for writing to a file&quot;&quot;&quot;</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">timeseries</span><span class="p">()</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">{</span><span class="n">c</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">c</span><span class="p">)</span><span class="o">.</span><span class="n">title</span><span class="p">()</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">})</span>
+        <span class="k">return</span> <span class="n">df</span>
+
+<div class="viewcode-block" id="IamDataFrame.to_csv"><a class="viewcode-back" href="../../source/IamDataFrame.html#pyam.IamDataFrame.to_csv">[docs]</a>    <span class="k">def</span> <span class="nf">to_csv</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Write data to a csv file</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        index: boolean, default False</span>
+<span class="sd">            write row names (index)</span>
+<span class="sd">        &quot;&quot;&quot;</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_to_file_format</span><span class="p">()</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+<div class="viewcode-block" id="IamDataFrame.to_excel"><a class="viewcode-back" href="../../source/IamDataFrame.html#pyam.IamDataFrame.to_excel">[docs]</a>    <span class="k">def</span> <span class="nf">to_excel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">writer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">sheet_name</span><span class="o">=</span><span class="s1">&#39;data&#39;</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Write timeseries data to Excel using the IAMC template convention</span>
+<span class="sd">        (wrapper for `pd.DataFrame.to_excel()`)</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        excel_writer: string or ExcelWriter object</span>
+<span class="sd">             file path or existing ExcelWriter</span>
+<span class="sd">        sheet_name: string, default &#39;data&#39;</span>
+<span class="sd">            name of the sheet that will contain the (filtered) IamDataFrame</span>
+<span class="sd">        index: boolean, default False</span>
+<span class="sd">            write row names (index)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">path</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">writer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> \
+           <span class="p">(</span><span class="n">path</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">writer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Only one of path and writer must have a value&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">writer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">writer</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">ExcelWriter</span><span class="p">(</span><span class="n">path</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_to_file_format</span><span class="p">()</span><span class="o">.</span><span class="n">to_excel</span><span class="p">(</span><span class="n">writer</span><span class="p">,</span> <span class="n">sheet_name</span><span class="o">=</span><span class="n">sheet_name</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+<div class="viewcode-block" id="IamDataFrame.export_metadata"><a class="viewcode-back" href="../../source/IamDataFrame.html#pyam.IamDataFrame.export_metadata">[docs]</a>    <span class="k">def</span> <span class="nf">export_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Export metadata to Excel</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        path: string</span>
+<span class="sd">            path/filename for xlsx file of metadata export</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">writer</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">ExcelWriter</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+        <span class="n">write_sheet</span><span class="p">(</span><span class="n">writer</span><span class="p">,</span> <span class="s1">&#39;metadata&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+        <span class="n">writer</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+
+<div class="viewcode-block" id="IamDataFrame.load_metadata"><a class="viewcode-back" href="../../source/IamDataFrame.html#pyam.IamDataFrame.load_metadata">[docs]</a>    <span class="k">def</span> <span class="nf">load_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Load metadata from previously exported instance of pyam</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        path: string</span>
+<span class="sd">            xlsx file with metadata exported from an instance of pyam</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;no metadata file &#39;&quot;</span> <span class="o">+</span> <span class="n">path</span> <span class="o">+</span> <span class="s2">&quot;&#39; found!&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">path</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s1">&#39;csv&#39;</span><span class="p">):</span>
+            <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_excel</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="n">req_cols</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;model&#39;</span><span class="p">,</span> <span class="s1">&#39;scenario&#39;</span><span class="p">,</span> <span class="s1">&#39;exclude&#39;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">set</span><span class="p">(</span><span class="n">req_cols</span><span class="p">)</span><span class="o">.</span><span class="n">issubset</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">)):</span>
+            <span class="n">e</span> <span class="o">=</span> <span class="s2">&quot;metadata file &#39;</span><span class="si">{}</span><span class="s2">&#39; does not have required columns (</span><span class="si">{}</span><span class="s2">)!&quot;</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">req_cols</span><span class="p">))</span>
+
+        <span class="n">df</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="n">META_IDX</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">combine_first</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">)</span>
+
+<div class="viewcode-block" id="IamDataFrame.line_plot"><a class="viewcode-back" href="../../source/IamDataFrame.html#pyam.IamDataFrame.line_plot">[docs]</a>    <span class="k">def</span> <span class="nf">line_plot</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Plot timeseries lines of existing data</span>
+
+<span class="sd">        see pyam.plotting.line_plot() for all available options</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">as_pandas</span><span class="p">(</span><span class="n">with_metadata</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">ax</span><span class="p">,</span> <span class="n">handles</span><span class="p">,</span> <span class="n">labels</span> <span class="o">=</span> <span class="n">plotting</span><span class="o">.</span><span class="n">line_plot</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">ax</span>
+
+<div class="viewcode-block" id="IamDataFrame.stack_plot"><a class="viewcode-back" href="../../source/IamDataFrame.html#pyam.IamDataFrame.stack_plot">[docs]</a>    <span class="k">def</span> <span class="nf">stack_plot</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Plot timeseries stacks of existing data</span>
+
+<span class="sd">        see pyam.plotting.stack_plot() for all available options</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">as_pandas</span><span class="p">(</span><span class="n">with_metadata</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">ax</span> <span class="o">=</span> <span class="n">plotting</span><span class="o">.</span><span class="n">stack_plot</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">ax</span>
+
+<div class="viewcode-block" id="IamDataFrame.bar_plot"><a class="viewcode-back" href="../../source/IamDataFrame.html#pyam.IamDataFrame.bar_plot">[docs]</a>    <span class="k">def</span> <span class="nf">bar_plot</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Plot timeseries bars of existing data</span>
+
+<span class="sd">        see pyam.plotting.bar_plot() for all available options</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">as_pandas</span><span class="p">(</span><span class="n">with_metadata</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">ax</span> <span class="o">=</span> <span class="n">plotting</span><span class="o">.</span><span class="n">bar_plot</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">ax</span>
+
+<div class="viewcode-block" id="IamDataFrame.pie_plot"><a class="viewcode-back" href="../../source/IamDataFrame.html#pyam.IamDataFrame.pie_plot">[docs]</a>    <span class="k">def</span> <span class="nf">pie_plot</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Plot a pie chart</span>
+
+<span class="sd">        see pyam.plotting.pie_plot() for all available options</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">as_pandas</span><span class="p">(</span><span class="n">with_metadata</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">ax</span> <span class="o">=</span> <span class="n">plotting</span><span class="o">.</span><span class="n">pie_plot</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">ax</span>
+
+<div class="viewcode-block" id="IamDataFrame.map_regions"><a class="viewcode-back" href="../../source/IamDataFrame.html#pyam.IamDataFrame.map_regions">[docs]</a>    <span class="k">def</span> <span class="nf">map_regions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">map_col</span><span class="p">,</span> <span class="n">agg</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">copy_col</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">fname</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                    <span class="n">region_col</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Plot regional data for a single model, scenario, variable, and year</span>
+
+<span class="sd">        see pyam.plotting.region_plot() for all available options</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        map_col: string</span>
+<span class="sd">            The column used to map new regions to. Common examples include</span>
+<span class="sd">            iso and 5_region.</span>
+<span class="sd">        agg: string, optional</span>
+<span class="sd">            Perform a data aggregation. Options include: sum.</span>
+<span class="sd">        copy_col: string, optional</span>
+<span class="sd">            Copy the existing region data into a new column for later use.</span>
+<span class="sd">        fname: string, optional</span>
+<span class="sd">            Use a non-default region mapping file</span>
+<span class="sd">        region_col: string, optional</span>
+<span class="sd">            Use a non-default column name for regions to map from.</span>
+<span class="sd">        inplace : bool, default False</span>
+<span class="sd">            if True, do operation inplace and return None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">models</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">get_level_values</span><span class="p">(</span><span class="s1">&#39;model&#39;</span><span class="p">)</span>
+        <span class="n">fname</span> <span class="o">=</span> <span class="n">fname</span> <span class="ow">or</span> <span class="n">run_control</span><span class="p">()[</span><span class="s1">&#39;region_mapping&#39;</span><span class="p">][</span><span class="s1">&#39;default&#39;</span><span class="p">]</span>
+        <span class="n">mapping</span> <span class="o">=</span> <span class="n">read_pandas</span><span class="p">(</span><span class="n">fname</span><span class="p">)</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="nb">str</span><span class="o">.</span><span class="n">lower</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="s1">&#39;columns&#39;</span><span class="p">)</span>
+
+        <span class="n">ret</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">inplace</span> <span class="k">else</span> <span class="bp">self</span>
+        <span class="n">_df</span> <span class="o">=</span> <span class="n">ret</span><span class="o">.</span><span class="n">data</span>
+        <span class="n">columns_orderd</span> <span class="o">=</span> <span class="n">_df</span><span class="o">.</span><span class="n">columns</span>
+
+        <span class="c1"># merge data</span>
+        <span class="n">dfs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">model</span> <span class="ow">in</span> <span class="n">models</span><span class="p">:</span>
+            <span class="n">df</span> <span class="o">=</span> <span class="n">_df</span><span class="p">[</span><span class="n">_df</span><span class="p">[</span><span class="s1">&#39;model&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="n">model</span><span class="p">]</span>
+
+            <span class="n">_col</span> <span class="o">=</span> <span class="n">region_col</span> <span class="ow">or</span> <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">.REGION&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+            <span class="n">_map</span> <span class="o">=</span> <span class="n">mapping</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">{</span><span class="n">_col</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span> <span class="s1">&#39;region&#39;</span><span class="p">})</span>
+            <span class="n">_map</span> <span class="o">=</span> <span class="n">_map</span><span class="p">[[</span><span class="s1">&#39;region&#39;</span><span class="p">,</span> <span class="n">map_col</span><span class="p">]]</span><span class="o">.</span><span class="n">dropna</span><span class="p">()</span><span class="o">.</span><span class="n">drop_duplicates</span><span class="p">()</span>
+
+            <span class="k">if</span> <span class="n">copy_col</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">df</span><span class="p">[</span><span class="n">copy_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="s1">&#39;region&#39;</span><span class="p">]</span>
+
+            <span class="n">df</span> <span class="o">=</span> <span class="p">(</span><span class="n">df</span>
+                  <span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">_map</span><span class="p">,</span> <span class="n">on</span><span class="o">=</span><span class="s1">&#39;region&#39;</span><span class="p">)</span>
+                  <span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="s1">&#39;region&#39;</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+                  <span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">{</span><span class="n">map_col</span><span class="p">:</span> <span class="s1">&#39;region&#39;</span><span class="p">})</span>
+                  <span class="p">)</span>
+            <span class="n">dfs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">dfs</span><span class="p">)</span>
+
+        <span class="c1"># perform aggregations</span>
+        <span class="k">if</span> <span class="n">agg</span> <span class="o">==</span> <span class="s1">&#39;sum&#39;</span><span class="p">:</span>
+            <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">IAMC_IDX</span> <span class="o">+</span> <span class="p">[</span><span class="s1">&#39;year&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
+
+        <span class="n">ret</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="p">(</span><span class="n">df</span>
+                    <span class="o">.</span><span class="n">reindex</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="n">columns_orderd</span><span class="p">)</span>
+                    <span class="o">.</span><span class="n">sort_values</span><span class="p">(</span><span class="n">SORT_IDX</span><span class="p">)</span>
+                    <span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                    <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">inplace</span><span class="p">:</span></div>
+            <span class="k">return</span> <span class="n">ret</span>
+
+<div class="viewcode-block" id="IamDataFrame.region_plot"><a class="viewcode-back" href="../../source/IamDataFrame.html#pyam.IamDataFrame.region_plot">[docs]</a>    <span class="k">def</span> <span class="nf">region_plot</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Plot regional data for a single model, scenario, variable, and year</span>
+
+<span class="sd">        see pyam.plotting.region_plot() for all available options</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">as_pandas</span><span class="p">(</span><span class="n">with_metadata</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">ax</span> <span class="o">=</span> <span class="n">plotting</span><span class="o">.</span><span class="n">region_plot</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div></div>
+        <span class="k">return</span> <span class="n">ax</span>
+
+
+<span class="k">def</span> <span class="nf">_meta_idx</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">data</span><span class="p">[</span><span class="n">META_IDX</span><span class="p">]</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="n">META_IDX</span><span class="p">)</span><span class="o">.</span><span class="n">index</span>
+
+
+<span class="k">def</span> <span class="nf">_apply_filters</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">meta</span><span class="p">,</span> <span class="n">filters</span><span class="p">):</span>
+    <span class="n">keep</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="kc">True</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
+
+    <span class="c1"># filter by columns and list of values</span>
+    <span class="k">for</span> <span class="n">col</span><span class="p">,</span> <span class="n">values</span> <span class="ow">in</span> <span class="n">filters</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">meta</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+            <span class="n">matches</span> <span class="o">=</span> <span class="n">pattern_match</span><span class="p">(</span><span class="n">meta</span><span class="p">[</span><span class="n">col</span><span class="p">],</span> <span class="n">values</span><span class="p">)</span>
+            <span class="n">cat_idx</span> <span class="o">=</span> <span class="n">meta</span><span class="p">[</span><span class="n">matches</span><span class="p">]</span><span class="o">.</span><span class="n">index</span>
+            <span class="n">keep_col</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="n">META_IDX</span><span class="p">]</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="n">META_IDX</span><span class="p">)</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">cat_idx</span><span class="p">)</span>
+
+        <span class="k">elif</span> <span class="n">col</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;model&#39;</span><span class="p">,</span> <span class="s1">&#39;scenario&#39;</span><span class="p">,</span> <span class="s1">&#39;region&#39;</span><span class="p">,</span> <span class="s1">&#39;unit&#39;</span><span class="p">]:</span>
+            <span class="n">keep_col</span> <span class="o">=</span> <span class="n">pattern_match</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="n">col</span><span class="p">],</span> <span class="n">values</span><span class="p">)</span>
+
+        <span class="k">elif</span> <span class="n">col</span> <span class="o">==</span> <span class="s1">&#39;variable&#39;</span><span class="p">:</span>
+            <span class="n">level</span> <span class="o">=</span> <span class="n">filters</span><span class="p">[</span><span class="s1">&#39;level&#39;</span><span class="p">]</span> <span class="k">if</span> <span class="s1">&#39;level&#39;</span> <span class="ow">in</span> <span class="n">filters</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="n">keep_col</span> <span class="o">=</span> <span class="n">pattern_match</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="n">col</span><span class="p">],</span> <span class="n">values</span><span class="p">,</span> <span class="n">level</span><span class="p">)</span>
+
+        <span class="k">elif</span> <span class="n">col</span> <span class="o">==</span> <span class="s1">&#39;year&#39;</span><span class="p">:</span>
+            <span class="n">keep_col</span> <span class="o">=</span> <span class="n">years_match</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="n">col</span><span class="p">],</span> <span class="n">values</span><span class="p">)</span>
+
+        <span class="k">elif</span> <span class="n">col</span> <span class="o">==</span> <span class="s1">&#39;level&#39;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s1">&#39;variable&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">filters</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                <span class="n">keep_col</span> <span class="o">=</span> <span class="n">pattern_match</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;variable&#39;</span><span class="p">],</span> <span class="s1">&#39;*&#39;</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="n">values</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">continue</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">SystemError</span><span class="p">(</span>
+                <span class="s1">&#39;filter by column &#39;</span> <span class="o">+</span> <span class="n">col</span> <span class="o">+</span> <span class="s1">&#39; not supported&#39;</span><span class="p">)</span>
+        <span class="n">keep</span> <span class="o">&amp;=</span> <span class="n">keep_col</span>
+
+    <span class="k">return</span> <span class="n">keep</span>
+
+
+<span class="k">def</span> <span class="nf">_check_rows</span><span class="p">(</span><span class="n">rows</span><span class="p">,</span> <span class="n">check</span><span class="p">,</span> <span class="n">in_range</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">return_test</span><span class="o">=</span><span class="s1">&#39;any&#39;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Check all rows to be in/out of a certain range and provide testing on return</span>
+<span class="sd">    values based on provided conditions</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    rows: pd.DataFrame</span>
+<span class="sd">        data rows</span>
+<span class="sd">    check: dict</span>
+<span class="sd">        dictionary with possible values of &quot;up&quot;, &quot;lo&quot;, and &quot;year&quot;</span>
+<span class="sd">    in_range: bool, optional</span>
+<span class="sd">        check if values are inside or outside of provided range</span>
+<span class="sd">    return_test: str, optional</span>
+<span class="sd">        possible values:</span>
+<span class="sd">            - &#39;any&#39;: default, return scenarios where check passes for any entry</span>
+<span class="sd">            - &#39;all&#39;: test if all values match checks, if not, return empty set</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">valid_checks</span> <span class="o">=</span> <span class="nb">set</span><span class="p">([</span><span class="s1">&#39;up&#39;</span><span class="p">,</span> <span class="s1">&#39;lo&#39;</span><span class="p">,</span> <span class="s1">&#39;year&#39;</span><span class="p">])</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">set</span><span class="p">(</span><span class="n">check</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span><span class="o">.</span><span class="n">issubset</span><span class="p">(</span><span class="n">valid_checks</span><span class="p">):</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s1">&#39;Unknown checking type: </span><span class="si">{}</span><span class="s1">&#39;</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">check</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="o">-</span> <span class="n">valid_checks</span><span class="p">))</span>
+
+    <span class="n">where_idx</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">rows</span><span class="o">.</span><span class="n">index</span><span class="p">[</span><span class="n">rows</span><span class="p">[</span><span class="s1">&#39;year&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="n">check</span><span class="p">[</span><span class="s1">&#39;year&#39;</span><span class="p">]])</span> \
+        <span class="k">if</span> <span class="s1">&#39;year&#39;</span> <span class="ow">in</span> <span class="n">check</span> <span class="k">else</span> <span class="nb">set</span><span class="p">(</span><span class="n">rows</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+    <span class="n">rows</span> <span class="o">=</span> <span class="n">rows</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="n">where_idx</span><span class="p">)]</span>
+
+    <span class="n">up_op</span> <span class="o">=</span> <span class="n">rows</span><span class="p">[</span><span class="s1">&#39;value&#39;</span><span class="p">]</span><span class="o">.</span><span class="fm">__le__</span> <span class="k">if</span> <span class="n">in_range</span> <span class="k">else</span> <span class="n">rows</span><span class="p">[</span><span class="s1">&#39;value&#39;</span><span class="p">]</span><span class="o">.</span><span class="fm">__gt__</span>
+    <span class="n">lo_op</span> <span class="o">=</span> <span class="n">rows</span><span class="p">[</span><span class="s1">&#39;value&#39;</span><span class="p">]</span><span class="o">.</span><span class="fm">__ge__</span> <span class="k">if</span> <span class="n">in_range</span> <span class="k">else</span> <span class="n">rows</span><span class="p">[</span><span class="s1">&#39;value&#39;</span><span class="p">]</span><span class="o">.</span><span class="fm">__lt__</span>
+
+    <span class="n">check_idx</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="p">(</span><span class="n">bd</span><span class="p">,</span> <span class="n">op</span><span class="p">)</span> <span class="ow">in</span> <span class="p">[(</span><span class="s1">&#39;up&#39;</span><span class="p">,</span> <span class="n">up_op</span><span class="p">),</span> <span class="p">(</span><span class="s1">&#39;lo&#39;</span><span class="p">,</span> <span class="n">lo_op</span><span class="p">)]:</span>
+        <span class="k">if</span> <span class="n">bd</span> <span class="ow">in</span> <span class="n">check</span><span class="p">:</span>
+            <span class="n">check_idx</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">rows</span><span class="o">.</span><span class="n">index</span><span class="p">[</span><span class="n">op</span><span class="p">(</span><span class="n">check</span><span class="p">[</span><span class="n">bd</span><span class="p">])]))</span>
+    <span class="n">check_idx</span> <span class="o">=</span> <span class="nb">set</span><span class="o">.</span><span class="n">intersection</span><span class="p">(</span><span class="o">*</span><span class="n">check_idx</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">return_test</span> <span class="ow">is</span> <span class="s1">&#39;any&#39;</span><span class="p">:</span>
+        <span class="n">ret</span> <span class="o">=</span> <span class="n">where_idx</span> <span class="o">&amp;</span> <span class="n">check_idx</span>
+    <span class="k">elif</span> <span class="n">return_test</span> <span class="o">==</span> <span class="s1">&#39;all&#39;</span><span class="p">:</span>
+        <span class="n">ret</span> <span class="o">=</span> <span class="n">where_idx</span> <span class="k">if</span> <span class="n">where_idx</span> <span class="o">==</span> <span class="n">check_idx</span> <span class="k">else</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Unknown return test: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">return_test</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">ret</span>
+
+
+<span class="k">def</span> <span class="nf">_apply_criteria</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">criteria</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Apply criteria individually to every model/scenario instance&quot;&quot;&quot;</span>
+    <span class="n">idxs</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">var</span><span class="p">,</span> <span class="n">check</span> <span class="ow">in</span> <span class="n">criteria</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">_df</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">df</span><span class="p">[</span><span class="s1">&#39;variable&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="n">var</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">group</span> <span class="ow">in</span> <span class="n">_df</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">META_IDX</span><span class="p">):</span>
+            <span class="n">grp_idxs</span> <span class="o">=</span> <span class="n">_check_rows</span><span class="p">(</span><span class="n">group</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">check</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="n">idxs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">grp_idxs</span><span class="p">)</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">itertools</span><span class="o">.</span><span class="n">chain</span><span class="p">(</span><span class="o">*</span><span class="n">idxs</span><span class="p">)]</span>
+    <span class="k">return</span> <span class="n">df</span>
+
+
+<span class="k">def</span> <span class="nf">validate</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Validate scenarios using criteria on timeseries values</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    df: IamDataFrame instance</span>
+<span class="sd">    args and kwargs: see IamDataFrame.validate() for details</span>
+<span class="sd">    filters: dict, optional</span>
+<span class="sd">        filter by data &amp; metadata columns, see function &#39;filter()&#39; for details,</span>
+<span class="sd">        filtering by &#39;variable&#39;/&#39;year&#39; is replaced by arguments of &#39;criteria&#39;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">filters</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;filters&#39;</span><span class="p">,</span> <span class="p">{})</span>
+    <span class="n">fdf</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">filters</span><span class="p">)</span>
+    <span class="n">vdf</span> <span class="o">=</span> <span class="n">fdf</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="n">df</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s1">&#39;exclude&#39;</span><span class="p">]</span> <span class="o">|=</span> <span class="n">fdf</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s1">&#39;exclude&#39;</span><span class="p">]</span>  <span class="c1"># update if any excluded</span>
+    <span class="k">return</span> <span class="n">vdf</span>
+
+
+<span class="k">def</span> <span class="nf">require_variable</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Check whether all scenarios have a required variable</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    df: IamDataFrame instance</span>
+<span class="sd">    args and kwargs: see IamDataFrame.require_variable() for details</span>
+<span class="sd">    filters: dict, optional</span>
+<span class="sd">        filter by data &amp; metadata columns, see function &#39;filter()&#39; for details</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">filters</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;filters&#39;</span><span class="p">,</span> <span class="p">{})</span>
+    <span class="n">fdf</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">filters</span><span class="p">)</span>
+    <span class="n">vdf</span> <span class="o">=</span> <span class="n">fdf</span><span class="o">.</span><span class="n">require_variable</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="n">df</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s1">&#39;exclude&#39;</span><span class="p">]</span> <span class="o">|=</span> <span class="n">fdf</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s1">&#39;exclude&#39;</span><span class="p">]</span>  <span class="c1"># update if any excluded</span>
+    <span class="k">return</span> <span class="n">vdf</span>
+
+
+<span class="k">def</span> <span class="nf">categorize</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Assign scenarios to a category according to specific criteria</span>
+<span class="sd">    or display the category assignment</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    df: IamDataFrame instance</span>
+<span class="sd">    args and kwargs: see IamDataFrame.categorize() for details</span>
+<span class="sd">    filters: dict, optional</span>
+<span class="sd">        filter by data &amp; metadata columns, see function &#39;filter()&#39; for details,</span>
+<span class="sd">        filtering by &#39;variable&#39;/&#39;year&#39; is replaced by arguments of &#39;criteria&#39;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">filters</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;filters&#39;</span><span class="p">,</span> <span class="p">{})</span>
+    <span class="n">fdf</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">filters</span><span class="p">)</span>
+    <span class="n">fdf</span><span class="o">.</span><span class="n">categorize</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="c1"># update metadata</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">)</span> <span class="k">else</span> <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">meta</span><span class="p">:</span>
+        <span class="n">df</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">fdf</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="n">name</span><span class="p">])</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">df</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">fdf</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../index.html">Documentation overview</a><ul>
+  <li><a href="../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    </div>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2017, Daniel Huppmann, Matthew Gidden @ IIASA Energy Program.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.7.1</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.10</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>
